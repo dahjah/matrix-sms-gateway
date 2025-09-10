@@ -1,7 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI, Form
-from nio import AsyncClient
+from nio import AsyncClient, RoomPreset
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -44,7 +44,7 @@ async def mailgun_webhook(
     resp = await matrix_client.room_create(
         invite=[target_jid],
         is_direct=True,
-        preset="trusted_private_chat",
+        preset=RoomPreset.private_chat,
     )
     room_id = resp.room_id
 
