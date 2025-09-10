@@ -33,7 +33,7 @@ async def mailgun_webhook(
     request: Request,
     recipient: str = Form(...),    # 'recipient' field from Mailgun webhook, e.g. 14155551212@yourdomain.com
     subject: str = Form(""),
-    body_plain: str = Form(""),
+    body_plain: str = Form("", alias="body-plain"),
 ):
     print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
     # Extract phone number from recipient email
