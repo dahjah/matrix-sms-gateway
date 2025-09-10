@@ -28,38 +28,39 @@ async def shutdown_event():
 async def health_check():
     return {"status": "ok", "message": "Service is running"}
 
+async def find_dm_room(client: AsyncClient, target_jid: str):
+    rooms = await client.joined_rooms()
+    for room_id in rooms.rooms:
+        room = client.rooms.get(room_id)
+        if room is None:
+            await client.room_get_state(room_id)
+            room = client.rooms.get(room_id)
+        if room and room.is_direct and target_jid in room.users:
+            return room_id
+    return None
+
 @app.post("/mailgun-webhook")
 async def mailgun_webhook(
     request: Request,
-    recipient: str = Form(...),    # 'recipient' field from Mailgun webhook, e.g. 14155551212@yourdomain.com
+    recipient: str = Form(...),
     subject: str = Form(""),
     body_plain: str = Form("", alias="body-plain"),
 ):
-    print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
-    # Extract phone number from recipient email
-    phone_jid_localpart = recipient.split("@")[0]
-    print(f"JID LOCALPART: {phone_jid_localpart}")
-    # Assuming your bridge uses cheogram.com domain for XMPP JIDs
     target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
+
+    print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
     print(f"TARGET JID: {target_jid}")
 
-    # Find or create direct message room with bridged target user
-    resp = await matrix_client.room_create(
-        invite=[target_jid],
-        is_direct=True,
-        preset=RoomPreset.private_chat,
-    )
-    print(f"MTX RESP: {resp}")
-    room_id = resp.room_id
+    room_id = await find_dm_room(matrix_client, target_jid)
+    if not room_id:
+        resp = await matrix_client.room_create(
+            invite=[target_jid],
+            is_direct=True,
+            preset=RoomPreset.private_chat,
+        )
+        room_id = resp.room_id
 
-    print(f"ROOM ID: {room_id}")
-
-    # Compose SMS body (you could prepend subject if needed)
     message = f"{body_plain}" if body_plain else "(empty message)"
-
-    print(f"MESSAGE: {message}")
-
-    # Send the message to the Matrix bridged user
     await matrix_client.room_send(
         room_id,
         message_type="m.room.message",
