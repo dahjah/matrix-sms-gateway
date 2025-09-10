@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]
 matrix-nio[e2e]
+python-multipart
