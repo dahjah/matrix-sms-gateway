@@ -35,10 +35,13 @@ async def mailgun_webhook(
     subject: str = Form(""),
     body_plain: str = Form(""),
 ):
+    print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
     # Extract phone number from recipient email
     phone_jid_localpart = recipient.split("@")[0]
+    print(f"JID LOCALPART: {phone_jid_localpart}")
     # Assuming your bridge uses cheogram.com domain for XMPP JIDs
-    target_jid = f"_{phone_jid_localpart}=40cheogram.com:aria-net.org"
+    target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
+    print(f"TARGET JID: {target_jid}")
 
     # Find or create direct message room with bridged target user
     resp = await matrix_client.room_create(
@@ -46,10 +49,15 @@ async def mailgun_webhook(
         is_direct=True,
         preset=RoomPreset.private_chat,
     )
+    print(f"MTX RESP: {resp}")
     room_id = resp.room_id
+
+    print(f"ROOM ID: {room_id}")
 
     # Compose SMS body (you could prepend subject if needed)
     message = f"{body_plain}" if body_plain else "(empty message)"
+
+    print(f"MESSAGE: {message}")
 
     # Send the message to the Matrix bridged user
     await matrix_client.room_send(
