@@ -24,6 +24,10 @@ async def shutdown_event():
     await matrix_client.logout()
     await matrix_client.close()
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "Service is running"}
+
 @app.post("/mailgun-webhook")
 async def mailgun_webhook(
     request: Request,
