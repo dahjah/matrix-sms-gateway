@@ -64,7 +64,6 @@ async def mailgun_webhook(
         )
         room_id = resp.room_id
 
-    message = f"{body_plain}" if body_plain else "(empty message)"
     await matrix_client.room_send(
         room_id,
         message_type="m.room.message",
