@@ -39,7 +39,8 @@ async def mailgun_webhook(
     body_plain: str = Form("", alias="body-plain"),
 ):
     phone_jid_localpart = recipient.split("@")[0]
-    if len(phone_jid_localpart) == 9
+    if len(phone_jid_localpart) == 9:
+        phone_jid_localpart = f"1{phone_jid_localpart}"
     target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
     message = f"{'('+subject+')' if subject else ''} {body_plain}" if body_plain else "(I got a text for you from Salesforce, but it didn't tell me what it was! - Monubot)"
 
