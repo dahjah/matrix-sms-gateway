@@ -49,7 +49,6 @@ async def mailgun_webhook(
     phone_jid_localpart = recipient.split("@")[0]
 
     print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
-    print(f"TARGET JID: {target_jid}")
 
     if len(phone_jid_localpart) == 9:
         phone_jid_localpart = f"1"
