@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  matrix-sms-gateway:
+    build: .
+    container_name: matrix-sms-gateway
+    environment:
+      MATRIX_HOMESERVER: "https://aria-net.org"
+      MATRIX_USER_ID: "@user:aria-net.org"
+      MATRIX_PASSWORD: "your_password"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
