@@ -1,9 +1,9 @@
 import os
 import asyncio
 from fastapi import FastAPI, Form
-from nio import AsyncClient, RoomPreset
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
+
+import niobot
 
 app = FastAPI()
 
@@ -12,66 +12,57 @@ HOMESERVER = os.getenv("MATRIX_HOMESERVER")
 USER_ID = os.getenv("MATRIX_USER_ID")
 PASSWORD = os.getenv("MATRIX_PASSWORD")
 
-# Initialize nio client globally and login once on startup
-matrix_client = AsyncClient(HOMESERVER, USER_ID)
+# Initialize NioBot globally
+bot = niobot.NioBot(
+    homeserver=HOMESERVER,
+    user_id=USER_ID,
+    password=PASSWORD,
+)
 
 @app.on_event("startup")
 async def startup_event():
-    await matrix_client.login(PASSWORD)
+    await bot.login()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await matrix_client.logout()
-    await matrix_client.close()
+    await bot.logout()
+    await bot.close()
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "message": "Service is running"}
 
-async def find_dm_room(client: AsyncClient, target_jid: str):
-    rooms = await client.joined_rooms()
-    for room_id in rooms.rooms:
-        room = client.rooms.get(room_id)
-        if room is None:
-            await client.room_get_state(room_id)
-            room = client.rooms.get(room_id)
-        if room and room.is_direct and target_jid in room.users:
-            return room_id
-    return None
-
 @app.post("/mailgun-webhook")
 async def mailgun_webhook(
-    request: Request,
     recipient: str = Form(...),
     subject: str = Form(""),
     body_plain: str = Form("", alias="body-plain"),
 ):
     phone_jid_localpart = recipient.split("@")[0]
+    if len(phone_jid_localpart) == 9
     target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
+    message = f"{'('+subject+')' if subject else ''} {body_plain}" if body_plain else "(I got a text for you from Salesforce, but it didn't tell me what it was! - Monubot)"
 
-    print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
-    print(f"TARGET JID: {target_jid}")
-
-    room_id = await find_dm_room(matrix_client, target_jid)
-    if not room_id:
-        resp = await matrix_client.room_create(
-            invite=[target_jid],
-            is_direct=True,
-            preset=RoomPreset.private_chat,
+    # Try to find existing DM rooms
+    rooms = await bot.get_dm_rooms(target_jid)
+    if rooms:
+        room_id = rooms[0]
+    else:
+        # Create DM room; Matrix generates the room_id
+        response = await bot.create_dm_room(target_jid)
+        room_id = response.room_id
+        # Set human-readable room name
+        room_name = f"Email->SMS with {phone_jid_localpart}"
+        await bot.client.room_put_state(
+            room_id,
+            "m.room.name",
+            {"name": room_name}
         )
-        room_id = resp.room_id
 
-    message = f"{body_plain}" if body_plain else "(empty message)"
-    await matrix_client.room_send(
-        room_id,
-        message_type="m.room.message",
-        content={
-            "msgtype": "m.text",
-            "body": message,
-        }
-    )
+    # Send message to the direct room
+    await bot.send_message(room_id, message)
 
-    return JSONResponse({"status": "SMS sent", "to": target_jid})
+    return JSONResponse({"status": "SMS sent", "to": target_jid, "room_id": room_id})
 
 if __name__ == "__main__":
     import uvicorn
