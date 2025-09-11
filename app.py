@@ -46,6 +46,7 @@ async def mailgun_webhook(
     subject: str = Form(""),
     body_plain: str = Form("", alias="body-plain"),
 ):
+    phone_jid_localpart = recipient.split("@")[0]
     target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
 
     print(f"RECIPIENT: {recipient}\nSUBJECT: {subject}\nBODY: {body_plain}")
