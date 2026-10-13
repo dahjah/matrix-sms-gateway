@@ -1,7 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI, Form
-from nio import AsyncClient, RoomPreset
+from nio import AsyncClient, RoomPreset, RoomCreateError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -62,6 +62,12 @@ async def mailgun_webhook(
             is_direct=True,
             preset=RoomPreset.private_chat,
         )
+        if isinstance(resp, RoomCreateError):
+            print(f"ERROR: Failed to create Matrix room for {target_jid}: {resp.status_code} {resp.message}")
+            return JSONResponse(
+                {"status": "error", "detail": f"Matrix room creation failed: {resp.message}"},
+                status_code=502,
+            )
         room_id = resp.room_id
 
     await matrix_client.room_send(
