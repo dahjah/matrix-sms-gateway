@@ -1,7 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI, Form
-from nio import AsyncClient, RoomPreset, RoomCreateError
+from nio import AsyncClient, RoomPreset, RoomCreateError, LoginError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -17,7 +17,21 @@ matrix_client = AsyncClient(HOMESERVER, USER_ID)
 
 @app.on_event("startup")
 async def startup_event():
-    await matrix_client.login(PASSWORD)
+    resp = await matrix_client.login(PASSWORD)
+    if isinstance(resp, LoginError):
+        print(f"ERROR: Matrix login failed at startup: {resp.message}")
+    else:
+        print(f"INFO: Logged into Matrix as {USER_ID}")
+
+async def ensure_logged_in():
+    """Re-login if the access token has expired."""
+    if not matrix_client.access_token:
+        print("INFO: No access token, re-logging in to Matrix...")
+        resp = await matrix_client.login(PASSWORD)
+        if isinstance(resp, LoginError):
+            print(f"ERROR: Matrix re-login failed: {resp.message}")
+            return False
+    return True
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -57,17 +71,38 @@ async def mailgun_webhook(
 
     room_id = await find_dm_room(matrix_client, target_jid)
     if not room_id:
+        if not await ensure_logged_in():
+            return JSONResponse({"status": "error", "detail": "Matrix login failed"}, status_code=502)
+
         resp = await matrix_client.room_create(
             invite=[target_jid],
             is_direct=True,
             preset=RoomPreset.private_chat,
         )
         if isinstance(resp, RoomCreateError):
-            print(f"ERROR: Failed to create Matrix room for {target_jid}: {resp.status_code} {resp.message}")
-            return JSONResponse(
-                {"status": "error", "detail": f"Matrix room creation failed: {resp.message}"},
-                status_code=502,
-            )
+            print(f"ERROR: Failed to create Matrix room for {target_jid}: status={resp.status_code!r} message={resp.message!r} full={resp!r}")
+            # If status_code is None the token may have expired — force re-login and retry once
+            if resp.status_code is None:
+                print("INFO: Forcing re-login and retrying room creation...")
+                matrix_client.access_token = ""
+                if not await ensure_logged_in():
+                    return JSONResponse({"status": "error", "detail": "Matrix re-login failed"}, status_code=502)
+                resp = await matrix_client.room_create(
+                    invite=[target_jid],
+                    is_direct=True,
+                    preset=RoomPreset.private_chat,
+                )
+                if isinstance(resp, RoomCreateError):
+                    print(f"ERROR: Room creation failed after re-login: status={resp.status_code!r} message={resp.message!r} full={resp!r}")
+                    return JSONResponse(
+                        {"status": "error", "detail": f"Matrix room creation failed after re-login: {resp.message}"},
+                        status_code=502,
+                    )
+            else:
+                return JSONResponse(
+                    {"status": "error", "detail": f"Matrix room creation failed: {resp.message}"},
+                    status_code=502,
+                )
         room_id = resp.room_id
 
     await matrix_client.room_send(
