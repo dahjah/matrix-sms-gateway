@@ -9,10 +9,19 @@ from starlette.requests import Request
 
 app = FastAPI()
 
+# Which backend delivers the SMS: "matrix" (default) or "xmpp"
+BACKEND = os.getenv("MESSAGING_BACKEND", "matrix").lower()
+
 # Matrix credentials and homeserver from environment
 HOMESERVER = os.getenv("MATRIX_HOMESERVER")
 USER_ID = os.getenv("MATRIX_USER_ID")
 PASSWORD = os.getenv("MATRIX_PASSWORD")
+
+# XMPP credentials and SMS gateway domain from environment
+XMPP_JID = os.getenv("XMPP_JID")
+XMPP_PASSWORD = os.getenv("XMPP_PASSWORD")
+XMPP_GATEWAY_DOMAIN = os.getenv("XMPP_GATEWAY_DOMAIN", "cheogram.com")
+xmpp_sender = None
 
 # File-backed cache: maps target_jid -> room_id so we never need to
 # scan all rooms or call createRoom for recipients we've seen before.
@@ -39,10 +48,17 @@ def save_room_cache():
         print(f"WARNING: Could not save room cache: {e}")
 
 # Initialize nio client globally and login once on startup
-matrix_client = AsyncClient(HOMESERVER, USER_ID)
+matrix_client = AsyncClient(HOMESERVER, USER_ID) if BACKEND == "matrix" else None
 
 @app.on_event("startup")
 async def startup_event():
+    global xmpp_sender
+    if BACKEND == "xmpp":
+        from xmpp_backend import XmppSender
+        xmpp_sender = XmppSender(XMPP_JID, XMPP_PASSWORD)
+        xmpp_sender.start()
+        print(f"INFO: Starting XMPP backend as {XMPP_JID}")
+        return
     load_room_cache()
     resp = await matrix_client.login(PASSWORD)
     if isinstance(resp, LoginError):
@@ -62,6 +78,10 @@ async def ensure_logged_in():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    if BACKEND == "xmpp":
+        if xmpp_sender:
+            await xmpp_sender.stop()
+        return
     await matrix_client.logout()
     await matrix_client.close()
 
@@ -107,6 +127,15 @@ async def mailgun_webhook(
     if len(phone_jid_localpart) == 9:
         phone_jid_localpart = f"1{phone_jid_localpart}"
     message = f"{'('+subject+')' if subject else ''} {body_plain}".strip() if body_plain else "(I got a text for you from Salesforce, but it didn't tell me what it was! - Monubot)"
+
+    if BACKEND == "xmpp":
+        xmpp_jid = f"+{phone_jid_localpart}@{XMPP_GATEWAY_DOMAIN}"
+        err = await xmpp_sender.send(xmpp_jid, message)
+        if err:
+            print(f"ERROR: XMPP send to {xmpp_jid} failed: {err}")
+            return JSONResponse({"status": "error", "detail": err}, status_code=502)
+        print(f"INFO: Sent XMPP message to {xmpp_jid}")
+        return JSONResponse({"status": "SMS sent", "to": xmpp_jid})
 
     target_jid = f"@_bifrost_=2b{phone_jid_localpart}=40cheogram.com:aria-net.org"
 

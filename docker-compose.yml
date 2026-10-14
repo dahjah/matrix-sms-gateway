@@ -5,9 +5,14 @@ services:
     build: .
     container_name: matrix-sms-gateway
     environment:
+      MESSAGING_BACKEND: "matrix"   # or "xmpp"
       MATRIX_HOMESERVER: "https://aria-net.org"
       MATRIX_USER_ID: "@user:aria-net.org"
       MATRIX_PASSWORD: "your_password"
+      # Used when MESSAGING_BACKEND=xmpp:
+      # XMPP_JID: "user@example.com"
+      # XMPP_PASSWORD: "your_password"
+      # XMPP_GATEWAY_DOMAIN: "cheogram.com"
     ports:
       - "8080:8080"
     restart: unless-stopped

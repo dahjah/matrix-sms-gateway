@@ -52,6 +52,14 @@ Set environment variables to connect the gateway to your Matrix account:
 - `MATRIX_USER_ID` — Your full Matrix user ID (e.g., @user:aria-net.org)
 - `MATRIX_PASSWORD` — Your Matrix account password or access token
 
+#### XMPP backend (alternative to Matrix)
+
+JMP.chat is natively XMPP, so you can skip Matrix entirely. Set `MESSAGING_BACKEND=xmpp` (default is `matrix`) and provide:
+
+- `XMPP_JID` — Your XMPP account JID (e.g., user@example.com). It must be registered with JMP.chat.
+- `XMPP_PASSWORD` — Your XMPP account password
+- `XMPP_GATEWAY_DOMAIN` — SMS gateway domain (default `cheogram.com`); messages go to `+<number>@cheogram.com`
+
 ### Mailgun Setup (Optional)
 
 1. Create an inbound route for your receiving email domain.
