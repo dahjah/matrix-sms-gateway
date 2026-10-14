@@ -60,6 +60,14 @@ JMP.chat is natively XMPP, so you can skip Matrix entirely. Set `MESSAGING_BACKE
 - `XMPP_PASSWORD` — Your XMPP account password
 - `XMPP_GATEWAY_DOMAIN` — SMS gateway domain (default `cheogram.com`); messages go to `+<number>@cheogram.com`
 
+#### Webhook authentication (required)
+
+`/mailgun-webhook` rejects every request unless it carries the shared secret in `WEBHOOK_TOKEN`:
+
+- `WEBHOOK_TOKEN` — a long random string (e.g., `openssl rand -hex 32`). If unset, all webhook requests are rejected (HTTP 503).
+- Send it either as a query parameter (`/mailgun-webhook?token=...`) or an `X-Webhook-Token` header. For Mailgun, put it in the route URL: `forward("https://your-host/mailgun-webhook?token=...")`.
+- Use https so the token isn't sent in clear text. `/health` stays unauthenticated.
+
 ### Mailgun Setup (Optional)
 
 1. Create an inbound route for your receiving email domain.

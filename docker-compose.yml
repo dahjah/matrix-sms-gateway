@@ -6,6 +6,7 @@ services:
     container_name: matrix-sms-gateway
     environment:
       MESSAGING_BACKEND: "matrix"   # or "xmpp"
+      WEBHOOK_TOKEN: "change_me_long_random_string"
       MATRIX_HOMESERVER: "https://aria-net.org"
       MATRIX_USER_ID: "@user:aria-net.org"
       MATRIX_PASSWORD: "your_password"

@@ -2,7 +2,8 @@ import os
 from typing import Dict, Optional
 import json
 import asyncio
-from fastapi import FastAPI, Form
+import hmac
+from fastapi import FastAPI, Form, Depends, Header, HTTPException, Query
 from nio import AsyncClient, RoomPreset, RoomCreateError, LoginError, RoomGetStateError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
@@ -22,6 +23,21 @@ XMPP_JID = os.getenv("XMPP_JID")
 XMPP_PASSWORD = os.getenv("XMPP_PASSWORD")
 XMPP_GATEWAY_DOMAIN = os.getenv("XMPP_GATEWAY_DOMAIN", "cheogram.com")
 xmpp_sender = None
+
+# Shared secret required on /mailgun-webhook, sent as ?token=... or an X-Webhook-Token header
+WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN")
+
+async def require_token(
+    token: str = Query(""),
+    x_webhook_token: str = Header(""),
+):
+    if not WEBHOOK_TOKEN:
+        print("ERROR: WEBHOOK_TOKEN is not set; rejecting webhook request")
+        raise HTTPException(status_code=503, detail="Webhook auth not configured")
+    supplied = token or x_webhook_token
+    if not hmac.compare_digest(supplied.encode(), WEBHOOK_TOKEN.encode()):
+        print("WARNING: Rejected webhook request with missing or invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 # File-backed cache: maps target_jid -> room_id so we never need to
 # scan all rooms or call createRoom for recipients we've seen before.
@@ -53,6 +69,8 @@ matrix_client = AsyncClient(HOMESERVER, USER_ID) if BACKEND == "matrix" else Non
 @app.on_event("startup")
 async def startup_event():
     global xmpp_sender
+    if not WEBHOOK_TOKEN:
+        print("WARNING: WEBHOOK_TOKEN is not set; all webhook requests will be rejected")
     if BACKEND == "xmpp":
         from xmpp_backend import XmppSender
         xmpp_sender = XmppSender(XMPP_JID, XMPP_PASSWORD)
@@ -113,7 +131,7 @@ async def find_dm_room(client: AsyncClient, target_jid: str) -> Optional[str]:
             continue
     return None
 
-@app.post("/mailgun-webhook")
+@app.post("/mailgun-webhook", dependencies=[Depends(require_token)])
 async def mailgun_webhook(
     request: Request,
     recipient: str = Form(...),
